@@ -23,6 +23,7 @@ function App() {
           { facingMode: "environment" },
           { fps: 10 },
           async (decodedText) => {
+            console.log(decodedText);
             // защита от повторов
             if (isProcessingRef.current) return;
             isProcessingRef.current = true;
@@ -43,7 +44,7 @@ function App() {
             }
 
             try {
-              const res = await fetch("http://localhost:3001/scan", {
+              const res = await fetch("https://qr-backend-4acq.onrender.com/scan", {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
