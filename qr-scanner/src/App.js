@@ -1,64 +1,78 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
 function App() {
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState("");
   const [name, setName] = useState("");
 
-  const scannerRef = useRef(null);
-  const isProcessingRef = useRef(false);
+  let lastScan = 0;
 
   useEffect(() => {
-    let scanner;
+    const html5QrCode = new Html5Qrcode("reader");
 
     const startScanner = async () => {
-      const element = document.getElementById("reader");
-      if (!element) return;
-
-      scanner = new Html5Qrcode("reader");
-      scannerRef.current = scanner;
-
       try {
-        await scanner.start(
+        await html5QrCode.start(
           { facingMode: "environment" },
-          { fps: 10 },
+          {
+            fps: 10,
+            qrbox: 250,
+          },
           async (decodedText) => {
-            console.log(decodedText);
-            // защита от повторов
-            if (isProcessingRef.current) return;
-            isProcessingRef.current = true;
+            console.log("QR:", decodedText);
 
-            // 🔥 остановка камеры
-            if (scannerRef.current) {
-              await scannerRef.current.stop();
-            }
+            // 🔥 анти-дребезг (3 секунды)
+            if (Date.now() - lastScan < 3000) return;
+            lastScan = Date.now();
 
-            const match = decodedText.match(/users\/(\d+)/);
-            const id = match ? match[1] : null;
-            console.log("ID из QR:", id);
-
-            if (!id) {
-              setStatus("not_found");
+            // 🔒 проверка что это Leader-ID
+            if (!decodedText.startsWith("https://leader-id.ru/users/")) {
+              setStatus("invalid_qr");
               setName("");
               return;
             }
 
+            // 🔥 извлекаем ID
+            const match = decodedText.match(/users\/(\d+)/);
+
+            if (!match) {
+              setStatus("invalid_qr");
+              setName("");
+              return;
+            }
+
+            const id = match[1];
+            console.log("ID:", id);
+
             try {
-              const res = await fetch("https://qr-backend-4acq.onrender.com/scan", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ id }),
-              });
+              const res = await fetch(
+                "https://qr-backend-4acq.onrender.com/scan",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ id }),
+                }
+              );
 
               const data = await res.json();
 
-              setStatus(data.status);
-              setName(data.name || "");
-            } catch (e) {
+              if (data.status === "ok") {
+                setStatus("ok");
+                setName(data.name);
+              } else if (data.status === "duplicate") {
+                setStatus("duplicate");
+                setName(data.name);
+              } else if (data.status === "not_found") {
+                setStatus("not_found");
+                setName("");
+              } else {
+                setStatus("error");
+              }
+            } catch (err) {
+              console.error(err);
               setStatus("error");
-              setName("");
             }
           }
         );
@@ -67,67 +81,50 @@ function App() {
       }
     };
 
-    const timer = setTimeout(startScanner, 800);
+    startScanner();
 
     return () => {
-      clearTimeout(timer);
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
-      }
+      html5QrCode.stop().catch(() => {});
     };
   }, []);
 
-  // 🔥 перезагрузка страницы через 2 секунды
-  useEffect(() => {
-    if (status) {
-      const timer = setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [status]);
-
   return (
-    <div
-      style={{
-        textAlign: "center",
-        height: "100vh",
-        background:
-          status === "ok"
-            ? "#2ecc71"
-            : status === "duplicate"
-            ? "#f39c12"
-            : status === "not_found"
-            ? "#e74c3c"
-            : "white",
-        color: status ? "white" : "black",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      {/* Камера */}
-      {!status && (
-        <>
-          <h2>Сканирование QR</h2>
+    <div style={{ textAlign: "center" }}>
+      <h1>QR Check-in</h1>
 
-          <div
-            id="reader"
-            style={{
-              width: "300px",
-              border: "1px solid black",
-            }}
-          ></div>
-        </>
-      )}
+      <div id="reader" style={{ width: "300px", margin: "auto" }} />
 
-      {/* Результат */}
-      {status === "ok" && <h1>✅ {name}</h1>}
-      {status === "duplicate" && <h1>⚠️ Уже отмечен</h1>}
-      {status === "not_found" && <h1>❌ Не найден</h1>}
-      {status === "error" && <h1>❌ Ошибка</h1>}
+      <div style={{ marginTop: "20px", fontSize: "20px" }}>
+        {status === "ok" && (
+          <div style={{ color: "green" }}>
+            ✅ Отмечен: {name}
+          </div>
+        )}
+
+        {status === "duplicate" && (
+          <div style={{ color: "orange" }}>
+            ⚠️ Уже отмечен: {name}
+          </div>
+        )}
+
+        {status === "not_found" && (
+          <div style={{ color: "red" }}>
+            ❌ Не найден
+          </div>
+        )}
+
+        {status === "invalid_qr" && (
+          <div style={{ color: "red" }}>
+            ❌ Неверный QR-код
+          </div>
+        )}
+
+        {status === "error" && (
+          <div style={{ color: "red" }}>
+            🚫 Ошибка сервера
+          </div>
+        )}
+      </div>
     </div>
   );
 }
