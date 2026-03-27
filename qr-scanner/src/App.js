@@ -1,19 +1,22 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
+// 🔥 глобальный флаг (ВАЖНО)
+let scannerStarted = false;
+
 function App() {
   const [status, setStatus] = useState("");
   const [name, setName] = useState("");
 
-  const lastScanRef = useRef(0);
-  const hasStarted = useRef(false);
+  const scannerRef = useRef(null);
+  const lastTextRef = useRef("");
 
   useEffect(() => {
-    if (hasStarted.current) return; // 🔥 защита от двойного запуска
-    hasStarted.current = true;
+    if (scannerStarted) return; // 🔥 блокируем второй запуск
+    scannerStarted = true;
 
     const html5QrCode = new Html5Qrcode("reader");
-    let isRunning = false;
+    scannerRef.current = html5QrCode;
 
     const startScanner = async () => {
       try {
@@ -26,29 +29,24 @@ function App() {
           async (decodedText) => {
             console.log("QR:", decodedText);
 
-            const text = decodedText.trim();
+            if (decodedText === lastTextRef.current) return;
+            lastTextRef.current = decodedText;
 
-            // 🔒 строгая проверка Leader-ID
-            if (!/^https:\/\/leader-id\.ru\/users\/\d+/.test(text)) {
+            setStatus("");
+            setName("");
+
+            if (!decodedText.includes("leader-id.ru/users/")) {
               setStatus("invalid_qr");
-              setName("");
               return;
             }
 
-            // 🔥 анти-дребезг
-            if (Date.now() - lastScanRef.current < 3000) return;
-            lastScanRef.current = Date.now();
-
-            // 🔥 извлекаем ID
-            const match = text.match(/users\/(\d+)/);
+            const match = decodedText.match(/users\/(\d+)/);
             if (!match) {
               setStatus("invalid_qr");
-              setName("");
               return;
             }
 
             const id = match[1];
-            console.log("ID:", id);
 
             try {
               const res = await fetch(
@@ -72,7 +70,6 @@ function App() {
                 setName(data.name);
               } else if (data.status === "not_found") {
                 setStatus("not_found");
-                setName("");
               } else {
                 setStatus("error");
               }
@@ -82,8 +79,6 @@ function App() {
             }
           }
         );
-
-        isRunning = true;
       } catch (e) {
         console.log("Ошибка запуска камеры", e);
       }
@@ -92,8 +87,16 @@ function App() {
     startScanner();
 
     return () => {
-      if (isRunning) {
-        html5QrCode.stop().catch(() => {});
+      if (scannerRef.current) {
+        try {
+          const state = scannerRef.current.getState();
+          if (state === 2) {
+            scannerRef.current.stop();
+          }
+        } catch (e) {
+          console.log("Scanner already stopped");
+        }
+        scannerRef.current = null;
       }
     };
   }, []);
