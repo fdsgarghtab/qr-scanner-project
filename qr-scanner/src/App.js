@@ -1,14 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
 function App() {
   const [status, setStatus] = useState("");
   const [name, setName] = useState("");
 
-  let lastScan = 0;
+  const lastScanRef = useRef(0);
+  const hasStarted = useRef(false);
 
   useEffect(() => {
+    if (hasStarted.current) return; // 🔥 защита от двойного запуска
+    hasStarted.current = true;
+
     const html5QrCode = new Html5Qrcode("reader");
+    let isRunning = false;
 
     const startScanner = async () => {
       try {
@@ -21,20 +26,21 @@ function App() {
           async (decodedText) => {
             console.log("QR:", decodedText);
 
-            // 🔥 анти-дребезг (3 секунды)
-            if (Date.now() - lastScan < 3000) return;
-            lastScan = Date.now();
+            const text = decodedText.trim();
 
-            // 🔒 проверка что это Leader-ID
-            if (!decodedText.startsWith("https://leader-id.ru/users/")) {
+            // 🔒 строгая проверка Leader-ID
+            if (!/^https:\/\/leader-id\.ru\/users\/\d+/.test(text)) {
               setStatus("invalid_qr");
               setName("");
               return;
             }
 
-            // 🔥 извлекаем ID
-            const match = decodedText.match(/users\/(\d+)/);
+            // 🔥 анти-дребезг
+            if (Date.now() - lastScanRef.current < 3000) return;
+            lastScanRef.current = Date.now();
 
+            // 🔥 извлекаем ID
+            const match = text.match(/users\/(\d+)/);
             if (!match) {
               setStatus("invalid_qr");
               setName("");
@@ -76,6 +82,8 @@ function App() {
             }
           }
         );
+
+        isRunning = true;
       } catch (e) {
         console.log("Ошибка запуска камеры", e);
       }
@@ -84,7 +92,9 @@ function App() {
     startScanner();
 
     return () => {
-      html5QrCode.stop().catch(() => {});
+      if (isRunning) {
+        html5QrCode.stop().catch(() => {});
+      }
     };
   }, []);
 
