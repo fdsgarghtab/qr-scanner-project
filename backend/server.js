@@ -197,6 +197,10 @@ app.post('/scan', async (req, res) => {
   }
 })
 
+app.get("/", (req, res) => {
+  res.send("OK");
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
