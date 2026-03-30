@@ -1,14 +1,15 @@
 import React, { useState, useRef } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
+import Admin from "./Admin";
 
-function App() {
+// ================= SCANNER =================
+function Scanner() {
   const [status, setStatus] = useState("");
   const [name, setName] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [flash, setFlash] = useState("");
-
-  const [count, setCount] = useState(0);
   const [logs, setLogs] = useState([]);
 
   const soundOnRef = useRef(true);
@@ -25,6 +26,7 @@ function App() {
   warningSound.current.preload = "auto";
   errorSound.current.preload = "auto";
 
+  // 🔥 прогрев
   const unlockAudio = () => {
     [successSound.current, warningSound.current, errorSound.current].forEach((s) => {
       s.volume = 0;
@@ -62,13 +64,11 @@ function App() {
     }
   };
 
-  // 🔥 вспышка
   const triggerFlash = (type) => {
     setFlash(type);
     setTimeout(() => setFlash(""), 150);
   };
 
-  // 📜 лог
   const addLog = (text) => {
     setLogs((prev) => [text, ...prev].slice(0, 5));
   };
@@ -109,11 +109,14 @@ function App() {
         const id = match[1];
 
         try {
-          const res = await fetch("https://qr-backend-4acq.onrender.com/scan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id }),
-          });
+          const res = await fetch(
+            "https://qr-backend-4acq.onrender.com/scan",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id }),
+            }
+          );
 
           const data = await res.json();
 
@@ -122,34 +125,28 @@ function App() {
             setName(data.name);
             triggerFlash("ok");
             playFeedback("ok");
-
-            setCount((c) => c + 1);
             addLog(`✅ ${data.name}`);
           } else if (data.status === "duplicate") {
             setStatus("duplicate");
             setName(data.name);
             triggerFlash("duplicate");
             playFeedback("duplicate");
-
             addLog(`⚠️ ${data.name}`);
           } else if (data.status === "not_found") {
             setStatus("not_found");
             triggerFlash("error");
             playFeedback("error");
-
             addLog("❌ Не найден");
           } else {
             setStatus("error");
             triggerFlash("error");
             playFeedback("error");
-
             addLog("❌ Ошибка");
           }
         } catch {
           setStatus("error");
           triggerFlash("error");
           playFeedback("error");
-
           addLog("❌ Сервер");
         }
 
@@ -217,14 +214,14 @@ function App() {
           {cameraOn ? "📴 Камера" : "📷 Камера"}
         </button>
 
-        <button onClick={toggleSound}>
+        <button onClick={() => {
+          setSoundOn(prev => {
+            soundOnRef.current = !prev;
+            return !prev;
+          });
+        }}>
           {soundOn ? "🔊" : "🔇"}
         </button>
-      </div>
-
-      {/* СЧЁТЧИК */}
-      <div style={{ textAlign: "center", marginTop: "10px", fontSize: "18px" }}>
-        👥 Сегодня: {count}
       </div>
 
       {/* КАМЕРА */}
@@ -246,6 +243,18 @@ function App() {
         ))}
       </div>
     </div>
+  );
+}
+
+// ================= ROUTER =================
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Scanner />} />
+        <Route path="/admin" element={<Admin />} />
+      </Routes>
+    </Router>
   );
 }
 
