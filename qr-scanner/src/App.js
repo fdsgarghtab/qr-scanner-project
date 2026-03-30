@@ -26,7 +26,7 @@ function Scanner() {
   warningSound.current.preload = "auto";
   errorSound.current.preload = "auto";
 
-  // 🔥 прогрев
+  // 🔥 прогрев звука
   const unlockAudio = () => {
     [successSound.current, warningSound.current, errorSound.current].forEach((s) => {
       s.volume = 0;
@@ -37,6 +37,7 @@ function Scanner() {
     });
   };
 
+  // 🔊 ПЕРЕКЛЮЧЕНИЕ ЗВУКА (исправлено)
   const toggleSound = () => {
     setSoundOn((prev) => {
       soundOnRef.current = !prev;
@@ -214,12 +215,7 @@ function Scanner() {
           {cameraOn ? "📴 Камера" : "📷 Камера"}
         </button>
 
-        <button onClick={() => {
-          setSoundOn(prev => {
-            soundOnRef.current = !prev;
-            return !prev;
-          });
-        }}>
+        <button onClick={toggleSound}>
           {soundOn ? "🔊" : "🔇"}
         </button>
       </div>
