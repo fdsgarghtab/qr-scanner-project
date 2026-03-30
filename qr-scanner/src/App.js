@@ -6,6 +6,10 @@ function App() {
   const [name, setName] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
+  const [flash, setFlash] = useState("");
+
+  const [count, setCount] = useState(0);
+  const [logs, setLogs] = useState([]);
 
   const soundOnRef = useRef(true);
   const scannerRef = useRef(null);
@@ -17,29 +21,20 @@ function App() {
   const warningSound = useRef(new Audio("/sounds/warning.mp3"));
   const errorSound = useRef(new Audio("/sounds/error.mp3"));
 
-  // 🔥 предзагрузка
   successSound.current.preload = "auto";
   warningSound.current.preload = "auto";
   errorSound.current.preload = "auto";
 
-  // 🔥 прогрев аудио (убирает задержку)
   const unlockAudio = () => {
-    const sounds = [
-      successSound.current,
-      warningSound.current,
-      errorSound.current,
-    ];
-
-    sounds.forEach((sound) => {
-      sound.volume = 0;
-      sound.play().catch(() => {});
-      sound.pause();
-      sound.currentTime = 0;
-      sound.volume = 1;
+    [successSound.current, warningSound.current, errorSound.current].forEach((s) => {
+      s.volume = 0;
+      s.play().catch(() => {});
+      s.pause();
+      s.currentTime = 0;
+      s.volume = 1;
     });
   };
 
-  // 🔊 переключение звука (фикс)
   const toggleSound = () => {
     setSoundOn((prev) => {
       soundOnRef.current = !prev;
@@ -47,25 +42,35 @@ function App() {
     });
   };
 
-  // 🔊 + 📳
   const playFeedback = (type) => {
     if (soundOnRef.current) {
-      let sound;
-
-      if (type === "ok") sound = successSound.current;
-      else if (type === "duplicate") sound = warningSound.current;
-      else sound = errorSound.current;
+      let sound =
+        type === "ok"
+          ? successSound.current
+          : type === "duplicate"
+          ? warningSound.current
+          : errorSound.current;
 
       sound.currentTime = 0;
       sound.play().catch(() => {});
     }
 
-    // 📳 вибрация
     if (navigator.vibrate) {
       if (type === "ok") navigator.vibrate(200);
       else if (type === "duplicate") navigator.vibrate([100, 50, 100]);
       else navigator.vibrate(300);
     }
+  };
+
+  // 🔥 вспышка
+  const triggerFlash = (type) => {
+    setFlash(type);
+    setTimeout(() => setFlash(""), 150);
+  };
+
+  // 📜 лог
+  const addLog = (text) => {
+    setLogs((prev) => [text, ...prev].slice(0, 5));
   };
 
   const startCamera = async () => {
@@ -84,7 +89,9 @@ function App() {
 
         if (!decodedText.includes("leader-id.ru/users/")) {
           setStatus("invalid");
+          triggerFlash("error");
           playFeedback("error");
+          addLog("❌ Неверный QR");
           reset();
           return;
         }
@@ -92,7 +99,9 @@ function App() {
         const match = decodedText.match(/users\/(\d+)/);
         if (!match) {
           setStatus("invalid");
+          triggerFlash("error");
           playFeedback("error");
+          addLog("❌ Неверный QR");
           reset();
           return;
         }
@@ -100,35 +109,48 @@ function App() {
         const id = match[1];
 
         try {
-          const res = await fetch(
-            "https://qr-backend-4acq.onrender.com/scan",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id }),
-            }
-          );
+          const res = await fetch("https://qr-backend-4acq.onrender.com/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
 
           const data = await res.json();
 
           if (data.status === "ok") {
             setStatus("ok");
             setName(data.name);
+            triggerFlash("ok");
             playFeedback("ok");
+
+            setCount((c) => c + 1);
+            addLog(`✅ ${data.name}`);
           } else if (data.status === "duplicate") {
             setStatus("duplicate");
             setName(data.name);
+            triggerFlash("duplicate");
             playFeedback("duplicate");
+
+            addLog(`⚠️ ${data.name}`);
           } else if (data.status === "not_found") {
             setStatus("not_found");
+            triggerFlash("error");
             playFeedback("error");
+
+            addLog("❌ Не найден");
           } else {
             setStatus("error");
+            triggerFlash("error");
             playFeedback("error");
+
+            addLog("❌ Ошибка");
           }
         } catch {
           setStatus("error");
+          triggerFlash("error");
           playFeedback("error");
+
+          addLog("❌ Сервер");
         }
 
         reset();
@@ -149,7 +171,7 @@ function App() {
 
   const toggleCamera = () => {
     if (!cameraOn) {
-      unlockAudio(); // 🔥 ключевой момент
+      unlockAudio();
       startCamera();
     } else {
       stopCamera();
@@ -164,52 +186,64 @@ function App() {
     }, 2000);
   };
 
-  const getColor = () => {
-    if (status === "ok") return "#16a34a";
-    if (status === "duplicate") return "#f59e0b";
-    if (status) return "#dc2626";
-    return "#000";
+  const getFlashColor = () => {
+    if (flash === "ok") return "rgba(34,197,94,0.4)";
+    if (flash === "duplicate") return "rgba(234,179,8,0.4)";
+    if (flash === "error") return "rgba(239,68,68,0.4)";
+    return "transparent";
   };
 
   return (
-    <div style={{ padding: "10px", fontFamily: "sans-serif" }}>
-      <h2 style={{ textAlign: "center", margin: "10px 0" }}>
-        QR Check-in
-      </h2>
+    <div style={{ padding: "10px", fontFamily: "sans-serif", position: "relative" }}>
+      {/* ВСПЫШКА */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: getFlashColor(),
+          pointerEvents: "none",
+          transition: "0.1s",
+        }}
+      />
+
+      <h2 style={{ textAlign: "center" }}>QR Check-in</h2>
 
       {/* КНОПКИ */}
       <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
-        <button onClick={toggleCamera} style={{ padding: "10px" }}>
+        <button onClick={toggleCamera}>
           {cameraOn ? "📴 Камера" : "📷 Камера"}
         </button>
 
-        <button onClick={toggleSound} style={{ padding: "10px" }}>
+        <button onClick={toggleSound}>
           {soundOn ? "🔊" : "🔇"}
         </button>
       </div>
 
+      {/* СЧЁТЧИК */}
+      <div style={{ textAlign: "center", marginTop: "10px", fontSize: "18px" }}>
+        👥 Сегодня: {count}
+      </div>
+
       {/* КАМЕРА */}
-      <div
-        id="reader"
-        style={{ width: "100%", maxWidth: "320px", margin: "10px auto" }}
-      />
+      <div id="reader" style={{ width: "100%", maxWidth: "320px", margin: "10px auto" }} />
 
       {/* СТАТУС */}
-      <div
-        style={{
-          marginTop: "10px",
-          fontSize: "20px",
-          fontWeight: "bold",
-          color: getColor(),
-          textAlign: "center",
-          minHeight: "50px",
-        }}
-      >
+      <div style={{ textAlign: "center", fontWeight: "bold", marginTop: "10px" }}>
         {status === "ok" && `✅ ${name}`}
-        {status === "duplicate" && `⚠️ Уже отмечен: ${name}`}
+        {status === "duplicate" && `⚠️ ${name}`}
         {status === "not_found" && "❌ Не найден"}
         {status === "invalid" && "❌ Неверный QR"}
         {status === "error" && "❌ Ошибка"}
+      </div>
+
+      {/* ЛОГ */}
+      <div style={{ marginTop: "15px", fontSize: "14px" }}>
+        {logs.map((log, i) => (
+          <div key={i}>{log}</div>
+        ))}
       </div>
     </div>
   );
