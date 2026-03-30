@@ -12,20 +12,42 @@ function App() {
   const lastTextRef = useRef("");
   const cooldownRef = useRef(false);
 
-  // 🔊 локальные звуки
+  // 🔊 звуки
   const successSound = useRef(new Audio("/sounds/success.mp3"));
   const warningSound = useRef(new Audio("/sounds/warning.mp3"));
   const errorSound = useRef(new Audio("/sounds/error.mp3"));
 
-  // 🔊 переключение звука (исправлено)
+  // 🔥 предзагрузка
+  successSound.current.preload = "auto";
+  warningSound.current.preload = "auto";
+  errorSound.current.preload = "auto";
+
+  // 🔥 прогрев аудио (убирает задержку)
+  const unlockAudio = () => {
+    const sounds = [
+      successSound.current,
+      warningSound.current,
+      errorSound.current,
+    ];
+
+    sounds.forEach((sound) => {
+      sound.volume = 0;
+      sound.play().catch(() => {});
+      sound.pause();
+      sound.currentTime = 0;
+      sound.volume = 1;
+    });
+  };
+
+  // 🔊 переключение звука (фикс)
   const toggleSound = () => {
-    setSoundOn(prev => {
+    setSoundOn((prev) => {
       soundOnRef.current = !prev;
       return !prev;
     });
   };
 
-  // 🔊 проигрывание + 📳 вибрация
+  // 🔊 + 📳
   const playFeedback = (type) => {
     if (soundOnRef.current) {
       let sound;
@@ -38,7 +60,7 @@ function App() {
       sound.play().catch(() => {});
     }
 
-    // 📳 вибрация для всех случаев
+    // 📳 вибрация
     if (navigator.vibrate) {
       if (type === "ok") navigator.vibrate(200);
       else if (type === "duplicate") navigator.vibrate([100, 50, 100]);
@@ -126,7 +148,12 @@ function App() {
   };
 
   const toggleCamera = () => {
-    cameraOn ? stopCamera() : startCamera();
+    if (!cameraOn) {
+      unlockAudio(); // 🔥 ключевой момент
+      startCamera();
+    } else {
+      stopCamera();
+    }
   };
 
   const reset = () => {
