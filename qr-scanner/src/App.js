@@ -1,142 +1,170 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
-// 🔥 глобальный флаг (ВАЖНО)
-let scannerStarted = false;
-
 function App() {
   const [status, setStatus] = useState("");
   const [name, setName] = useState("");
+  const [cameraOn, setCameraOn] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
 
   const scannerRef = useRef(null);
   const lastTextRef = useRef("");
+  const cooldownRef = useRef(false);
 
-  useEffect(() => {
-    if (scannerStarted) return; // 🔥 блокируем второй запуск
-    scannerStarted = true;
+  // 🔊 звуки
+  const playSound = (type) => {
+    if (!soundOn) return;
 
-    const html5QrCode = new Html5Qrcode("reader");
-    scannerRef.current = html5QrCode;
+    const audio = new Audio(
+      type === "ok"
+        ? "https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"
+        : "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+    );
+    audio.play();
+  };
 
-    const startScanner = async () => {
-      try {
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: 250,
-          },
-          async (decodedText) => {
-            console.log("QR:", decodedText);
+  const startCamera = async () => {
+    const scanner = new Html5Qrcode("reader");
+    scannerRef.current = scanner;
 
-            if (decodedText === lastTextRef.current) return;
-            lastTextRef.current = decodedText;
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      async (decodedText) => {
+        if (cooldownRef.current) return;
 
-            setStatus("");
-            setName("");
+        if (decodedText === lastTextRef.current) return;
+        lastTextRef.current = decodedText;
+        cooldownRef.current = true;
 
-            if (!decodedText.includes("leader-id.ru/users/")) {
-              setStatus("invalid_qr");
-              return;
-            }
+        setStatus("");
+        setName("");
 
-            const match = decodedText.match(/users\/(\d+)/);
-            if (!match) {
-              setStatus("invalid_qr");
-              return;
-            }
-
-            const id = match[1];
-
-            try {
-              const res = await fetch(
-                "https://qr-backend-4acq.onrender.com/scan",
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({ id }),
-                }
-              );
-
-              const data = await res.json();
-
-              if (data.status === "ok") {
-                setStatus("ok");
-                setName(data.name);
-              } else if (data.status === "duplicate") {
-                setStatus("duplicate");
-                setName(data.name);
-              } else if (data.status === "not_found") {
-                setStatus("not_found");
-              } else {
-                setStatus("error");
-              }
-            } catch (err) {
-              console.error(err);
-              setStatus("error");
-            }
-          }
-        );
-      } catch (e) {
-        console.log("Ошибка запуска камеры", e);
-      }
-    };
-
-    startScanner();
-
-    return () => {
-      if (scannerRef.current) {
-        try {
-          const state = scannerRef.current.getState();
-          if (state === 2) {
-            scannerRef.current.stop();
-          }
-        } catch (e) {
-          console.log("Scanner already stopped");
+        if (!decodedText.includes("leader-id.ru/users/")) {
+          setStatus("invalid");
+          playSound("error");
+          navigator.vibrate?.(100);
+          resetStatus();
+          return;
         }
-        scannerRef.current = null;
+
+        const match = decodedText.match(/users\/(\d+)/);
+        if (!match) {
+          setStatus("invalid");
+          playSound("error");
+          navigator.vibrate?.(100);
+          resetStatus();
+          return;
+        }
+
+        const id = match[1];
+
+        try {
+          const res = await fetch(
+            "https://qr-backend-4acq.onrender.com/scan",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id }),
+            }
+          );
+
+          const data = await res.json();
+
+          if (data.status === "ok") {
+            setStatus("ok");
+            setName(data.name);
+            playSound("ok");
+            navigator.vibrate?.(200);
+          } else if (data.status === "duplicate") {
+            setStatus("duplicate");
+            setName(data.name);
+            playSound("error");
+          } else if (data.status === "not_found") {
+            setStatus("not_found");
+            playSound("error");
+          } else {
+            setStatus("error");
+            playSound("error");
+          }
+        } catch {
+          setStatus("error");
+          playSound("error");
+        }
+
+        resetStatus();
       }
-    };
-  }, []);
+    );
+
+    setCameraOn(true);
+  };
+
+  const stopCamera = async () => {
+    if (scannerRef.current) {
+      await scannerRef.current.stop();
+      scannerRef.current.clear();
+      scannerRef.current = null;
+    }
+    setCameraOn(false);
+  };
+
+  const toggleCamera = () => {
+    cameraOn ? stopCamera() : startCamera();
+  };
+
+  const resetStatus = () => {
+    setTimeout(() => {
+      setStatus("");
+      setName("");
+      cooldownRef.current = false;
+    }, 2500);
+  };
+
+  const getColor = () => {
+    switch (status) {
+      case "ok":
+        return "green";
+      case "duplicate":
+        return "orange";
+      case "invalid":
+      case "error":
+      case "not_found":
+        return "red";
+      default:
+        return "black";
+    }
+  };
 
   return (
-    <div style={{ textAlign: "center" }}>
+    <div style={{ textAlign: "center", padding: "20px" }}>
       <h1>QR Check-in</h1>
+
+      <div style={{ marginBottom: "10px" }}>
+        <button onClick={toggleCamera} style={{ fontSize: "18px", margin: "5px" }}>
+          {cameraOn ? "📴 Выключить камеру" : "📷 Включить камеру"}
+        </button>
+
+        <button onClick={() => setSoundOn(!soundOn)} style={{ fontSize: "18px", margin: "5px" }}>
+          {soundOn ? "🔊 Звук ВКЛ" : "🔇 Звук ВЫКЛ"}
+        </button>
+      </div>
 
       <div id="reader" style={{ width: "300px", margin: "auto" }} />
 
-      <div style={{ marginTop: "20px", fontSize: "20px" }}>
-        {status === "ok" && (
-          <div style={{ color: "green" }}>
-            ✅ Отмечен: {name}
-          </div>
-        )}
-
-        {status === "duplicate" && (
-          <div style={{ color: "orange" }}>
-            ⚠️ Уже отмечен: {name}
-          </div>
-        )}
-
-        {status === "not_found" && (
-          <div style={{ color: "red" }}>
-            ❌ Не найден
-          </div>
-        )}
-
-        {status === "invalid_qr" && (
-          <div style={{ color: "red" }}>
-            ❌ Неверный QR-код
-          </div>
-        )}
-
-        {status === "error" && (
-          <div style={{ color: "red" }}>
-            🚫 Ошибка сервера
-          </div>
-        )}
+      <div
+        style={{
+          marginTop: "20px",
+          fontSize: "26px",
+          fontWeight: "bold",
+          color: getColor(),
+          minHeight: "40px",
+        }}
+      >
+        {status === "ok" && `✅ Отмечен: ${name}`}
+        {status === "duplicate" && `⚠️ Уже отмечен: ${name}`}
+        {status === "not_found" && "❌ Не найден"}
+        {status === "invalid" && "❌ Неверный QR"}
+        {status === "error" && "❌ Ошибка"}
       </div>
     </div>
   );
