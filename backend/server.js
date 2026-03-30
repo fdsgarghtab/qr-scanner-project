@@ -9,10 +9,8 @@ app.use(bodyParser.json())
 
 const PORT = 3001
 
-// 🔐 пароль из ENV
+// 🔐 ENV
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
-
-// 🔐 простой токен (временно)
 const ADMIN_TOKEN = "secret_token_123"
 
 // === Google Sheets ===
@@ -69,7 +67,9 @@ async function markAttendance(rowNumber, colIndex) {
     spreadsheetId,
     range,
     valueInputOption: 'RAW',
-    requestBody: { values: [['✓']] },
+    requestBody: {
+      values: [['✓']],
+    },
   })
 }
 
@@ -90,7 +90,13 @@ app.post('/admin-login', (req, res) => {
 
 // === ADMIN DATA (ЗАЩИЩЕНО) ===
 app.get('/admin-data', async (req, res) => {
-  const token = req.headers.authorization
+  const authHeader = req.headers.authorization
+
+  if (!authHeader) {
+    return res.sendStatus(403)
+  }
+
+  const token = authHeader.replace("Bearer ", "")
 
   if (token !== ADMIN_TOKEN) {
     return res.sendStatus(403)
@@ -120,12 +126,13 @@ app.get('/admin-data', async (req, res) => {
       checked,
       logs,
     })
-  } catch (e) {
+  } catch (err) {
+    console.error(err)
     res.status(500).json({ error: 'error' })
   }
 })
 
-// === SCAN === (оставляем как есть)
+// === SCAN ===
 app.post('/scan', async (req, res) => {
   try {
     const { id } = req.body
@@ -159,11 +166,13 @@ app.post('/scan', async (req, res) => {
       name: user.row[1],
     })
 
-  } catch {
+  } catch (err) {
+    console.error(err)
     res.status(500).json({ status: 'error' })
   }
 })
 
+// === HEALTH CHECK ===
 app.get("/", (req, res) => {
   res.send("OK");
 });
