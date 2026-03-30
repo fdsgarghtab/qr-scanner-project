@@ -7,17 +7,27 @@ function App() {
   const [cameraOn, setCameraOn] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
 
+  const soundOnRef = useRef(true);
   const scannerRef = useRef(null);
   const lastTextRef = useRef("");
   const cooldownRef = useRef(false);
 
-  // 🔊 ЗВУКИ (создаются 1 раз)
-  const successSound = useRef(new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"));
-  const warningSound = useRef(new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"));
-  const errorSound = useRef(new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg"));
+  // 🔊 локальные звуки
+  const successSound = useRef(new Audio("/sounds/success.mp3"));
+  const warningSound = useRef(new Audio("/sounds/warning.mp3"));
+  const errorSound = useRef(new Audio("/sounds/error.mp3"));
 
+  // 🔊 переключение звука (исправлено)
+  const toggleSound = () => {
+    setSoundOn(prev => {
+      soundOnRef.current = !prev;
+      return !prev;
+    });
+  };
+
+  // 🔊 проигрывание + 📳 вибрация
   const playFeedback = (type) => {
-    if (soundOn) {
+    if (soundOnRef.current) {
       let sound;
 
       if (type === "ok") sound = successSound.current;
@@ -28,7 +38,7 @@ function App() {
       sound.play().catch(() => {});
     }
 
-    // 📳 Вибрация ВСЕГДА
+    // 📳 вибрация для всех случаев
     if (navigator.vibrate) {
       if (type === "ok") navigator.vibrate(200);
       else if (type === "duplicate") navigator.vibrate([100, 50, 100]);
@@ -68,13 +78,14 @@ function App() {
         const id = match[1];
 
         try {
-          const res = await fetch("https://qr-backend-4acq.onrender.com/scan", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ id }),
-          });
+          const res = await fetch(
+            "https://qr-backend-4acq.onrender.com/scan",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id }),
+            }
+          );
 
           const data = await res.json();
 
@@ -135,21 +146,26 @@ function App() {
 
   return (
     <div style={{ padding: "10px", fontFamily: "sans-serif" }}>
-      <h2 style={{ textAlign: "center", margin: "10px 0" }}>QR Check-in</h2>
+      <h2 style={{ textAlign: "center", margin: "10px 0" }}>
+        QR Check-in
+      </h2>
 
       {/* КНОПКИ */}
       <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
-        <button onClick={toggleCamera} style={{ fontSize: "16px", padding: "10px" }}>
+        <button onClick={toggleCamera} style={{ padding: "10px" }}>
           {cameraOn ? "📴 Камера" : "📷 Камера"}
         </button>
 
-        <button onClick={() => setSoundOn(!soundOn)} style={{ fontSize: "16px", padding: "10px" }}>
+        <button onClick={toggleSound} style={{ padding: "10px" }}>
           {soundOn ? "🔊" : "🔇"}
         </button>
       </div>
 
       {/* КАМЕРА */}
-      <div id="reader" style={{ width: "100%", maxWidth: "320px", margin: "10px auto" }} />
+      <div
+        id="reader"
+        style={{ width: "100%", maxWidth: "320px", margin: "10px auto" }}
+      />
 
       {/* СТАТУС */}
       <div
