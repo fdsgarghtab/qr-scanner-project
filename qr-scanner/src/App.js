@@ -1,73 +1,29 @@
 import React, { useState, useRef } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
-import Admin from "./Admin";
 
 // ================= SCANNER =================
 function Scanner() {
   const [status, setStatus] = useState("");
   const [name, setName] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
-  const [soundOn, setSoundOn] = useState(true);
   const [flash, setFlash] = useState("");
   const [logs, setLogs] = useState([]);
 
-  const soundOnRef = useRef(true);
   const scannerRef = useRef(null);
   const lastTextRef = useRef("");
   const cooldownRef = useRef(false);
 
-  // 🔊 звуки
-  const successSound = useRef(new Audio("/sounds/success.mp3"));
-  const warningSound = useRef(new Audio("/sounds/warning.mp3"));
-  const errorSound = useRef(new Audio("/sounds/error.mp3"));
-
-  successSound.current.preload = "auto";
-  warningSound.current.preload = "auto";
-  errorSound.current.preload = "auto";
-
-  // 🔥 прогрев звука
-  const unlockAudio = () => {
-    [successSound.current, warningSound.current, errorSound.current].forEach((s) => {
-      s.volume = 0;
-      s.play().catch(() => {});
-      s.pause();
-      s.currentTime = 0;
-      s.volume = 1;
-    });
-  };
-
-  // 🔊 ПЕРЕКЛЮЧЕНИЕ ЗВУКА (исправлено)
-  const toggleSound = () => {
-    setSoundOn((prev) => {
-      soundOnRef.current = !prev;
-      return !prev;
-    });
+  const triggerFlash = (type) => {
+    setFlash(type);
+    setTimeout(() => setFlash(""), 400); // 🔥 БЫЛО 150
   };
 
   const playFeedback = (type) => {
-    if (soundOnRef.current) {
-      let sound =
-        type === "ok"
-          ? successSound.current
-          : type === "duplicate"
-          ? warningSound.current
-          : errorSound.current;
-
-      sound.currentTime = 0;
-      sound.play().catch(() => {});
-    }
-
     if (navigator.vibrate) {
       if (type === "ok") navigator.vibrate(200);
       else if (type === "duplicate") navigator.vibrate([100, 50, 100]);
       else navigator.vibrate(300);
     }
-  };
-
-  const triggerFlash = (type) => {
-    setFlash(type);
-    setTimeout(() => setFlash(""), 150);
   };
 
   const addLog = (text) => {
@@ -169,7 +125,6 @@ function Scanner() {
 
   const toggleCamera = () => {
     if (!cameraOn) {
-      unlockAudio();
       startCamera();
     } else {
       stopCamera();
@@ -185,15 +140,14 @@ function Scanner() {
   };
 
   const getFlashColor = () => {
-    if (flash === "ok") return "rgba(34,197,94,0.4)";
-    if (flash === "duplicate") return "rgba(234,179,8,0.4)";
-    if (flash === "error") return "rgba(239,68,68,0.4)";
+    if (flash === "ok") return "rgba(34,197,94,0.5)";
+    if (flash === "duplicate") return "rgba(234,179,8,0.5)";
+    if (flash === "error") return "rgba(239,68,68,0.5)";
     return "transparent";
   };
 
   return (
     <div style={{ padding: "10px", fontFamily: "sans-serif", position: "relative" }}>
-      {/* ВСПЫШКА */}
       <div
         style={{
           position: "fixed",
@@ -203,27 +157,20 @@ function Scanner() {
           height: "100%",
           background: getFlashColor(),
           pointerEvents: "none",
-          transition: "0.1s",
+          transition: "0.3s", // 🔥 мягче
         }}
       />
 
       <h2 style={{ textAlign: "center" }}>QR Check-in</h2>
 
-      {/* КНОПКИ */}
-      <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
+      <div style={{ display: "flex", justifyContent: "center" }}>
         <button onClick={toggleCamera}>
           {cameraOn ? "📴 Камера" : "📷 Камера"}
         </button>
-
-        <button onClick={toggleSound}>
-          {soundOn ? "🔊" : "🔇"}
-        </button>
       </div>
 
-      {/* КАМЕРА */}
       <div id="reader" style={{ width: "100%", maxWidth: "320px", margin: "10px auto" }} />
 
-      {/* СТАТУС */}
       <div style={{ textAlign: "center", fontWeight: "bold", marginTop: "10px" }}>
         {status === "ok" && `✅ ${name}`}
         {status === "duplicate" && `⚠️ ${name}`}
@@ -232,7 +179,6 @@ function Scanner() {
         {status === "error" && "❌ Ошибка"}
       </div>
 
-      {/* ЛОГ */}
       <div style={{ marginTop: "15px", fontSize: "14px" }}>
         {logs.map((log, i) => (
           <div key={i}>{log}</div>
@@ -242,16 +188,4 @@ function Scanner() {
   );
 }
 
-// ================= ROUTER =================
-function App() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Scanner />} />
-        <Route path="/admin" element={<Admin />} />
-      </Routes>
-    </Router>
-  );
-}
-
-export default App;
+export default Scanner;
