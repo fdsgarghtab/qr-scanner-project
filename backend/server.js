@@ -9,10 +9,6 @@ app.use(bodyParser.json())
 
 const PORT = 3001
 
-// 🔐 ENV
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
-const ADMIN_TOKEN = "secret_token_123"
-
 // === Google Sheets ===
 const auth = new google.auth.GoogleAuth({
   credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
@@ -24,7 +20,7 @@ const sheets = google.sheets({ version: 'v4', auth })
 const spreadsheetId = '1UjVFuNYTraeIit0JHD6YFwJ5DNI2xj_DedSdZXUGPs8'
 const sheetName = 'Лист1'
 
-// === USERS ===
+// === HELPERS ===
 async function getUsers() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -73,65 +69,6 @@ async function markAttendance(rowNumber, colIndex) {
   })
 }
 
-// === LOGIN ===
-app.post('/admin-login', (req, res) => {
-  const { password } = req.body
-
-  if (!password) {
-    return res.sendStatus(400)
-  }
-
-  if (password.trim() === ADMIN_PASSWORD?.trim()) {
-    return res.json({ token: ADMIN_TOKEN })
-  }
-
-  return res.sendStatus(401)
-})
-
-// === ADMIN DATA (ЗАЩИЩЕНО) ===
-app.get('/admin-data', async (req, res) => {
-  const authHeader = req.headers.authorization
-
-  if (!authHeader) {
-    return res.sendStatus(403)
-  }
-
-  const token = authHeader.replace("Bearer ", "")
-
-  if (token !== ADMIN_TOKEN) {
-    return res.sendStatus(403)
-  }
-
-  try {
-    const users = await getUsers()
-
-    const header = await getHeaderRow()
-    const today = getTodayColumnName()
-    const colIndex = findColumnIndex(header, today)
-
-    let checked = 0
-    let logs = []
-
-    users.forEach(u => {
-      if (u.row[colIndex]) {
-        checked++
-        logs.push(u.row[1])
-      }
-    })
-
-    logs = logs.slice(-10).reverse()
-
-    res.json({
-      total: users.length,
-      checked,
-      logs,
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'error' })
-  }
-})
-
 // === SCAN ===
 app.post('/scan', async (req, res) => {
   try {
@@ -172,10 +109,10 @@ app.post('/scan', async (req, res) => {
   }
 })
 
-// === HEALTH CHECK ===
+// === HEALTH ===
 app.get("/", (req, res) => {
-  res.send("OK");
-});
+  res.send("OK")
+})
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
