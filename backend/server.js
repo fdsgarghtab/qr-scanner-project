@@ -99,13 +99,14 @@ async function getUnknownHeader() {
   return res.data.values[0]
 }
 
+// 🔥 Исправлено: теперь не пишем дату/время
 async function addUnknownUser(id) {
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${unknownSheet}!A:B`,
+    range: `${unknownSheet}!A:A`,
     valueInputOption: 'RAW',
     requestBody: {
-      values: [[id, new Date().toLocaleString()]],
+      values: [[id]],
     },
   })
 }
@@ -171,7 +172,6 @@ app.post('/scan', async (req, res) => {
 
     if (existing) {
       // уже есть такой ID
-
       if (existing.row[colIndex]) {
         return res.json({ status: 'not_found' }) // уже отмечен сегодня
       }
