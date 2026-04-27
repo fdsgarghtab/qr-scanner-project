@@ -7,7 +7,7 @@ const app = express()
 app.use(cors())
 app.use(bodyParser.json())
 
-const PORT = 3001
+const PORT = process.env.PORT || 3001
 
 // === Google Sheets ===
 const auth = new google.auth.GoogleAuth({
@@ -37,7 +37,7 @@ function getColumnLetter(index) {
   return String.fromCharCode(65 + index)
 }
 
-// === MAIN USERS ===
+// === USERS ===
 async function getUsers() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -75,7 +75,7 @@ async function markAttendance(rowNumber, colIndex) {
   })
 }
 
-// === UNKNOWN USERS ===
+// === UNKNOWN ===
 async function getUnknownData() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -99,7 +99,6 @@ async function getUnknownHeader() {
   return res.data.values[0]
 }
 
-// 🔥 Исправлено: теперь не пишем дату/время
 async function addUnknownUser(id) {
   await sheets.spreadsheets.values.append({
     spreadsheetId,
@@ -127,24 +126,30 @@ async function markUnknown(rowNumber, colIndex) {
 
 // === SCAN ===
 app.post('/scan', async (req, res) => {
-  try {
-    const { id } = req.body
+  const { id } = req.body
 
-    // === ПРОВЕРКА ОСНОВНЫХ ПОЛЬЗОВАТЕЛЕЙ ===
+  console.log(`📥 SCAN: ${id}`) // 👈 лог входящего запроса
+
+  try {
     const users = await getUsers()
     const user = users.find(u => u.row[0] === id)
 
     const today = getTodayColumnName()
 
+    // === НАЙДЕН В ОСНОВНОЙ ТАБЛИЦЕ ===
     if (user) {
+      console.log(`👤 FOUND USER: ${user.row[1]}`)
+
       const header = await getHeaderRow()
       const colIndex = findColumnIndex(header, today)
 
       if (colIndex === -1) {
+        console.log("⚠️ NO COLUMN FOR TODAY")
         return res.json({ status: 'no_column' })
       }
 
       if (user.row[colIndex]) {
+        console.log("⚠️ DUPLICATE SCAN")
         return res.json({
           status: 'duplicate',
           name: user.row[1],
@@ -153,13 +158,17 @@ app.post('/scan', async (req, res) => {
 
       await markAttendance(user.sheetRow, colIndex)
 
+      console.log("✅ MARKED ATTENDANCE")
+
       return res.json({
         status: 'ok',
         name: user.row[1],
       })
     }
 
-    // === НЕ НАЙДЕННЫЕ ===
+    // === НЕИЗВЕСТНЫЙ ===
+    console.log("❓ UNKNOWN USER")
+
     const unknownUsers = await getUnknownData()
     const existing = unknownUsers.find(u => u.row[0] === id)
 
@@ -167,24 +176,25 @@ app.post('/scan', async (req, res) => {
     const colIndex = findColumnIndex(header, today)
 
     if (colIndex === -1) {
+      console.log("⚠️ NO COLUMN IN UNKNOWN SHEET")
       return res.json({ status: 'no_column' })
     }
 
     if (existing) {
-      // уже есть такой ID
       if (existing.row[colIndex]) {
-        return res.json({ status: 'not_found' }) // уже отмечен сегодня
+        console.log("⚠️ UNKNOWN ALREADY MARKED")
+        return res.json({ status: 'not_found' })
       }
 
       await markUnknown(existing.sheetRow, colIndex)
 
+      console.log("✏️ MARKED UNKNOWN EXISTING")
+
       return res.json({ status: 'not_found' })
     }
 
-    // новый unknown
     await addUnknownUser(id)
 
-    // нужно получить новую строку (последнюю)
     const updatedUnknown = await getUnknownData()
     const newUser = updatedUnknown.find(u => u.row[0] === id)
 
@@ -192,19 +202,22 @@ app.post('/scan', async (req, res) => {
       await markUnknown(newUser.sheetRow, colIndex)
     }
 
+    console.log("➕ ADDED NEW UNKNOWN")
+
     return res.json({ status: 'not_found' })
 
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ status: 'error' })
+    console.error("❌ ERROR:", err) // 👈 ВАЖНО: теперь ты увидишь причину
+    return res.status(500).json({ status: 'error' })
   }
 })
 
 // === HEALTH ===
 app.get("/", (req, res) => {
+  console.log("💚 HEALTH CHECK")
   res.send("OK")
 })
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
+  console.log(`🚀 Server running on port ${PORT}`)
 })
