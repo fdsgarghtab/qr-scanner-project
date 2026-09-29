@@ -86,7 +86,7 @@ function getColumnLetter(index) {
 async function getUsers() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${sheetName}!A2:Z1000`,
+    range: `${sheetName}!A2:AG1000`,
   })
 
   const rows = res.data.values || []
@@ -129,7 +129,7 @@ async function markAttendance(rowNumber, colIndex) {
 async function getUnknownData() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${unknownSheet}!A2:Z1000`,
+    range: `${unknownSheet}!A2:AG1000`,
   })
 
   const rows = res.data.values || []
