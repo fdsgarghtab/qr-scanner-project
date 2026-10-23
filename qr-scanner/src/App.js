@@ -187,5 +187,5 @@ function Scanner() {
     </div>
   );
 }
-
+// aaaaaaaaaa
 export default Scanner;
