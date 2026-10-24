@@ -74,10 +74,19 @@ function findColumnIndex(headerRow, columnName) {
 
 // Переводим номер колонки в букву
 // 0 -> A
-// 1 -> B
-// 5 -> F
+// 25 -> Z
+// 26 -> AA
 function getColumnLetter(index) {
-  return String.fromCharCode(65 + index)
+  let temp, letter = '';
+  let col = index + 1; 
+  
+  while (col > 0) {
+    temp = (col - 1) % 26;
+    letter = String.fromCharCode(temp + 65) + letter;
+    col = (col - temp - 1) / 26;
+  }
+  
+  return letter;
 }
 
 // ================= USERS =================
